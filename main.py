@@ -1,8 +1,8 @@
 import time
-import feedparser
 import requests
 import json
 import os
+import re
 
 # ===== 設定 =====
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -14,36 +14,48 @@ ACCOUNTS = [
     "Getsuriku"
 ]
 
-CHECK_INTERVAL = 120  # ←少し長め（安定化）
-
+CHECK_INTERVAL = 120
 MODEL = "gemini-3.1-flash-lite-preview"
 RESULT_FILE = "results.json"
 
-RSS_SOURCES = [
-    "https://nitter.cz/",
-    "https://nitter.moomoo.me/",
-    "https://nitter.privacydev.net/"
-]
+seen_ids = set()
 
-def get_feed(username):
-    for base in RSS_SOURCES:
-        try:
-            url = f"{base}{username}/rss"
+# ===== 投稿取得（syndication API）=====
+def get_posts(username):
+    posts = []
 
-            feed = feedparser.parse(
-                url,
-                request_headers={"User-Agent": "Mozilla/5.0"}
-            )
+    try:
+        url = f"https://cdn.syndication.twimg.com/widgets/timelines/profile?screen_name={username}"
 
-            if feed.entries:
-                print(f"OK: {username} ({base})")
-                return feed
+        res = requests.get(url, timeout=10)
+        data = res.json()
 
-        except Exception as e:
-            print("fail:", base, e)
+        html = data.get("body", "")
 
-    print("RSS全滅:", username)
-    return None
+        # 投稿ブロックごと抽出
+        items = re.findall(r'<div class="timeline-Tweet.*?</div>\s*</div>', html, re.DOTALL)
+
+        for item in items:
+            try:
+                # テキスト抽出
+                text = re.sub('<.*?>', '', item)
+                text = text.strip()
+
+                # tweet id抽出
+                match = re.search(r'data-tweet-id="(\d+)"', item)
+                tweet_id = match.group(1) if match else text[:50]
+
+                if tweet_id not in seen_ids:
+                    seen_ids.add(tweet_id)
+                    posts.append(text)
+
+            except:
+                continue
+
+    except Exception as e:
+        print("syndication error:", username, e)
+
+    return posts
 
 
 # ===== Gemini =====
@@ -66,6 +78,7 @@ def evaluate(text):
 - 場所（location）
 - 大会名（competition）
 - 備考（note）
+- その他重要情報（noteに含めてもOK）
 
 不明な場合は null
 
@@ -104,9 +117,9 @@ def evaluate(text):
 
         data = res.json()
 
-        # ===== ここが重要 =====
+        # エラーチェック
         if "candidates" not in data:
-            print("Gemini APIエラー:", data)
+            print("Gemini API error:", data)
             return None
 
         raw = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -132,43 +145,23 @@ def save(data):
         print("Save error:", e)
 
 
-# ===== 投稿取得 =====
-def get_posts():
-    new_posts = []
-
-    for acc in ACCOUNTS:
-        feed = get_feed(acc)
-
-        if not feed:
-            continue
-
-        for entry in feed.entries:
-            try:
-                post_id = entry.id
-
-                if post_id not in seen_ids:
-                    seen_ids.add(post_id)
-
-                    text = entry.title
-                    new_posts.append(text)
-
-            except Exception as e:
-                print("Entry error:", e)
-
-    return new_posts
-
-
-# ===== メインループ =====
+# ===== メイン =====
 while True:
     try:
         print("checking...")
 
-        posts = get_posts()
+        all_posts = []
 
-        if posts:
-            print(f"{len(posts)}件取得")
+        for acc in ACCOUNTS:
+            posts = get_posts(acc)
 
-            for p in posts:
+            if posts:
+                print(f"{acc}: {len(posts)}件取得")
+
+            all_posts.extend(posts)
+
+        if all_posts:
+            for p in all_posts:
                 result = evaluate(p)
 
                 if result and result.get("display"):
