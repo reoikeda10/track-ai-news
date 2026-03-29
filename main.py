@@ -1,12 +1,9 @@
-import time
 import requests
 import json
 import os
 import re
-threading.Thread(target=run_loop).start()
-port = int(os.environ.get("PORT", 10000))
+import feedparser
 
-app.run(host="0.0.0.0", port=port)
 # ===== 設定 =====
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
@@ -17,14 +14,11 @@ ACCOUNTS = [
     "Getsuriku"
 ]
 
-CHECK_INTERVAL = 120
 MODEL = "gemini-3.1-flash-lite-preview"
 RESULT_FILE = "results.json"
 
-seen_ids = set()
-
-# ===== 投稿取得（syndication API）=====
-def get_posts(username):
+# ===== 投稿取得（syndication）=====
+def get_posts_syndication(username):
     posts = []
 
     try:
@@ -37,43 +31,42 @@ def get_posts(username):
 
         res = requests.get(url, headers=headers, timeout=10)
 
-        # ===== ここ重要 =====
         if res.status_code != 200:
-            print("HTTP error:", res.status_code, username)
             return []
 
-        # JSONじゃない場合対策
         try:
             data = res.json()
         except:
-            print("JSON decode error:", username, res.text[:100])
             return []
 
         html = data.get("body", "")
 
-        if not html:
-            print("空データ:", username)
-            return []
-
-        # 投稿抽出
         items = re.findall(r'<div class="timeline-Tweet.*?</div>\s*</div>', html, re.DOTALL)
 
         for item in items:
-            try:
-                text = re.sub('<.*?>', '', item).strip()
+            text = re.sub('<.*?>', '', item).strip()
+            if text:
+                posts.append(text)
 
-                match = re.search(r'data-tweet-id="(\d+)"', item)
-                tweet_id = match.group(1) if match else text[:50]
+    except:
+        pass
 
-                if tweet_id not in seen_ids:
-                    seen_ids.add(tweet_id)
-                    posts.append(text)
+    return posts
 
-            except:
-                continue
 
-    except Exception as e:
-        print("syndication error:", username, e)
+# ===== 保険（Google News RSS）=====
+def get_posts_google(username):
+    posts = []
+
+    try:
+        url = f"https://news.google.com/rss/search?q=site:twitter.com/{username}"
+        feed = feedparser.parse(url)
+
+        for e in feed.entries:
+            posts.append(e.title)
+
+    except:
+        pass
 
     return posts
 
@@ -137,87 +130,71 @@ def evaluate(text):
 
         data = res.json()
 
-        # エラーチェック
         if "candidates" not in data:
-            print("Gemini API error:", data)
             return None
 
         raw = data["candidates"][0]["content"]["parts"][0]["text"]
 
-        # JSON抽出
         start = raw.find("{")
         end = raw.rfind("}") + 1
         json_text = raw[start:end]
 
         return json.loads(json_text)
 
-    except Exception as e:
-        print("Gemini error:", e)
+    except:
         return None
 
 
 # ===== 保存 =====
-def save(data):
+def save(data_list):
     try:
-        with open(RESULT_FILE, "a", encoding="utf-8") as f:
-            f.write(json.dumps(data, ensure_ascii=False) + "\n")
-    except Exception as e:
-        print("Save error:", e)
+        with open(RESULT_FILE, "w", encoding="utf-8") as f:
+            json.dump(data_list, f, ensure_ascii=False, indent=2)
+    except:
+        pass
 
 
-# ===== メイン ====
-from flask import Flask
-import threading
+# ===== メイン =====
+def main():
+    print("start")
 
-app = Flask(__name__)
+    all_posts = []
 
-@app.route("/")
-def home():
-    return "running"
+    for acc in ACCOUNTS:
+        posts = get_posts_syndication(acc)
 
-def run_loop():
-    while True:
-        try:
-            print("checking...")
+        if not posts:
+            posts = get_posts_google(acc)
 
-            all_posts = []
+        print(acc, len(posts))
 
-            for acc in ACCOUNTS:
-                posts = get_posts(acc)
-                all_posts.extend(posts)
+        all_posts.extend(posts)
 
-            if all_posts:
-                for p in all_posts:
-                    result = evaluate(p)
+    results = []
 
-                    if result and result.get("display"):
-                        save({
-                            "text": p,
-                            "score": result.get("score"),
-                            "event": result.get("event"),
-                            "mark": result.get("mark"),
-                            "wind": result.get("wind"),
-                            "athlete": result.get("athlete"),
-                            "country": result.get("country"),
-                            "competition": result.get("competition"),
-                            "location": result.get("location"),
-                            "date": result.get("date"),
-                            "note": result.get("note"),
-                            "reason": result.get("reason")
-                        })
+    for p in all_posts[:10]:  # ←API節約
+        result = evaluate(p)
 
-                        print("saved:", p)
+        if result and result.get("display"):
+            results.append({
+                "text": p,
+                "score": result.get("score"),
+                "event": result.get("event"),
+                "mark": result.get("mark"),
+                "wind": result.get("wind"),
+                "athlete": result.get("athlete"),
+                "country": result.get("country"),
+                "competition": result.get("competition"),
+                "location": result.get("location"),
+                "date": result.get("date"),
+                "note": result.get("note"),
+                "reason": result.get("reason")
+            })
 
-            else:
-                print("no new")
+    save(results)
 
-        except Exception as e:
-            print("MAIN ERROR:", e)
+    print("done", len(results))
 
-        time.sleep(CHECK_INTERVAL)
 
-# 別スレッドで実行
-threading.Thread(target=run_loop).start()
-
-# Webサーバー起動
-app.run(host="0.0.0.0", port=10000)
+if __name__ == "__main__":
+    main()
