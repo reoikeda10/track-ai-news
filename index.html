@@ -25,11 +25,13 @@ async function load(){
     div.style.padding="10px";
 
     div.innerHTML = `
-      <b>${d.event} ${d.mark}</b><br>
-      ${d.text}<br>
-      Score:${d.score}<br>
-      ${d.reason}
-    `;
+  <b>${d.event} ${d.mark} (${d.wind})</b><br>
+  ${d.athlete} (${d.country})<br>
+  ${d.competition} - ${d.location}<br>
+  ${d.note}<br>
+  理由: ${d.reason}<br>
+  <small>Score: ${d.score}</small>
+`;
 
     app.appendChild(div);
   });
