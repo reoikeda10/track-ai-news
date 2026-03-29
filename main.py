@@ -19,33 +19,22 @@ CHECK_INTERVAL = 120  # ←少し長め（安定化）
 MODEL = "gemini-3.1-flash-lite-preview"
 RESULT_FILE = "results.json"
 
-# 複数Nitter（重要）
-NITTER_INSTANCES = [
-    "https://nitter.net",
-    "https://nitter.poast.org",
-    "https://nitter.privacydev.net",
-    "https://nitter.rawbit.ch"
+RSS_SOURCES = [
+    "https://rsshub.app/twitter/user/",
+    "https://rsshub.rssforever.com/twitter/user/"
 ]
 
-seen_ids = set()
-
-# ===== RSS取得（フォールバック付き）=====
 def get_feed(username):
-    for base in NITTER_INSTANCES:
+    for base in RSS_SOURCES:
         try:
-            url = f"{base}/{username}/rss"
-
-            feed = feedparser.parse(
-                url,
-                request_headers={"User-Agent": "Mozilla/5.0"}
-            )
+            url = base + username
+            feed = feedparser.parse(url)
 
             if feed.entries:
                 print(f"OK: {username} ({base})")
                 return feed
-
-        except Exception as e:
-            print("RSS fail:", base, username, e)
+        except:
+            continue
 
     print("RSS全滅:", username)
     return None
