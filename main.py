@@ -21,32 +21,13 @@ RESULT_FILE = "results.json"
 
 seen_ids = set()
 
-# ===== フィルタ =====
-def is_candidate(text):
-    keywords = ["m","WR","WL","NR","PB","jump","throw"]
-    return any(k.lower() in text.lower() for k in keywords)
-
 # ===== Gemini =====
 def evaluate(text):
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_API_KEY}"
 
-        res = requests.post(url, json={
-            "contents":[{"parts":[{"text":prompt}]}]
-        }, timeout=10)
-
-        data = res.json()
-
-        raw = data["candidates"][0]["content"]["parts"][0]["text"]
-
-        return json.loads(raw)
-
-    except Exception as e:
-        print("Gemini error:", e)
-        return None
-
         prompt = f"""
-        あなたは陸上競技の専門家です。
+あなたは陸上競技の専門家です。
 
 以下の投稿から情報を正確に抽出し、その記録の価値を評価してください。
 
@@ -72,7 +53,7 @@ def evaluate(text):
 - 大会の格も考慮
 
 【出力形式（JSONのみ）】
-{
+{{
  "display": true/false,
  "score": 0-100,
  "event": "",
@@ -85,31 +66,35 @@ def evaluate(text):
  "date": "",
  "note": "",
  "reason": ""
-}
+}}
 
-【重要】
-- JSON以外は一切出力しない
-- 推測しすぎない（不明はnull）
-- 投稿文の情報を最大限使う
-
-
-投稿:
+投稿：
 {text}
 """
 
-        res = requests.post(url, json={
-            "contents":[{"parts":[{"text":prompt}]}]
-        }, timeout=10)
+        res = requests.post(
+            url,
+            json={
+                "contents": [{"parts": [{"text": prompt}]}]
+            },
+            timeout=15
+        )
 
         data = res.json()
 
-        text_out = data["candidates"][0]["content"]["parts"][0]["text"]
+        raw = data["candidates"][0]["content"]["parts"][0]["text"]
 
-        return json.loads(text_out)
+        # JSONだけ抽出（壊れ対策）
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        json_text = raw[start:end]
+
+        return json.loads(json_text)
 
     except Exception as e:
         print("Gemini error:", e)
         return None
+
 
 # ===== 保存 =====
 def save(data):
@@ -119,27 +104,31 @@ def save(data):
     except Exception as e:
         print("Save error:", e)
 
-# ===== RSS =====
+
+# ===== RSS取得 =====
 def get_posts():
-    new = []
+    new_posts = []
 
     for acc in ACCOUNTS:
         try:
             feed = feedparser.parse(f"https://nitter.net/{acc}/rss")
 
-            for e in feed.entries:
-                if e.id not in seen_ids:
-                    seen_ids.add(e.id)
+            for entry in feed.entries:
+                post_id = entry.id
 
-                    if is_candidate(e.title):
-                        new.append(e.title)
+                if post_id not in seen_ids:
+                    seen_ids.add(post_id)
+
+                    text = entry.title
+                    new_posts.append(text)
 
         except Exception as e:
             print("RSS error:", acc, e)
 
-    return new
+    return new_posts
 
-# ===== メイン =====
+
+# ===== メインループ =====
 while True:
     try:
         print("checking...")
@@ -147,26 +136,26 @@ while True:
         posts = get_posts()
 
         if posts:
-            print(f"{len(posts)}件処理")
+            print(f"{len(posts)}件取得")
 
             for p in posts:
                 result = evaluate(p)
 
-                if result and result.get("display")
-                save({
-                    "text": p,
-                    "score": result.get("score"),
-                    "event": result.get("event"),
-                    "mark": result.get("mark"),
-                    "wind": result.get("wind"),
-                    "athlete": result.get("athlete"),
-                    "country": result.get("country"),
-                    "competition": result.get("competition"),
-                    "location": result.get("location"),
-                    "date": result.get("date"),
-                    "note": result.get("note"),
-                    "reason": result.get("reason")
-                })
+                if result and result.get("display"):
+                    save({
+                        "text": p,
+                        "score": result.get("score"),
+                        "event": result.get("event"),
+                        "mark": result.get("mark"),
+                        "wind": result.get("wind"),
+                        "athlete": result.get("athlete"),
+                        "country": result.get("country"),
+                        "competition": result.get("competition"),
+                        "location": result.get("location"),
+                        "date": result.get("date"),
+                        "note": result.get("note"),
+                        "reason": result.get("reason")
+                    })
 
                     print("saved:", p)
 
