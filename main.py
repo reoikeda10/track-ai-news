@@ -5,7 +5,7 @@ import json
 import os
 
 # ===== 設定 =====
-GEMINI_API_KEY = "AIzaSyBKcxpFOgVMvSN-S2xeirP3dilDSuVwoQ4"  # ←入れる
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 ACCOUNTS = [
     "travismillerx13",
