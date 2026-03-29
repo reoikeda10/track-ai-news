@@ -20,21 +20,27 @@ MODEL = "gemini-3.1-flash-lite-preview"
 RESULT_FILE = "results.json"
 
 RSS_SOURCES = [
-    "https://rsshub.app/twitter/user/",
-    "https://rsshub.rssforever.com/twitter/user/"
+    "https://nitter.cz/",
+    "https://nitter.moomoo.me/",
+    "https://nitter.privacydev.net/"
 ]
 
 def get_feed(username):
     for base in RSS_SOURCES:
         try:
-            url = base + username
-            feed = feedparser.parse(url)
+            url = f"{base}{username}/rss"
+
+            feed = feedparser.parse(
+                url,
+                request_headers={"User-Agent": "Mozilla/5.0"}
+            )
 
             if feed.entries:
                 print(f"OK: {username} ({base})")
                 return feed
-        except:
-            continue
+
+        except Exception as e:
+            print("fail:", base, e)
 
     print("RSS全滅:", username)
     return None
