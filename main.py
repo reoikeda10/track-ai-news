@@ -152,21 +152,21 @@ while True:
             for p in posts:
                 result = evaluate(p)
 
-                if result and result.get("display"):
-    save({
-        "text": p,
-        "score": result.get("score"),
-        "event": result.get("event"),
-        "mark": result.get("mark"),
-        "wind": result.get("wind"),
-        "athlete": result.get("athlete"),
-        "country": result.get("country"),
-        "competition": result.get("competition"),
-        "location": result.get("location"),
-        "date": result.get("date"),
-        "note": result.get("note"),
-        "reason": result.get("reason")
-                    })
+                if result and result.get("display")
+                save({
+                    "text": p,
+                    "score": result.get("score"),
+                    "event": result.get("event"),
+                    "mark": result.get("mark"),
+                    "wind": result.get("wind"),
+                    "athlete": result.get("athlete"),
+                    "country": result.get("country"),
+                    "competition": result.get("competition"),
+                    "location": result.get("location"),
+                    "date": result.get("date"),
+                    "note": result.get("note"),
+                    "reason": result.get("reason")
+                })
 
                     print("saved:", p)
 
