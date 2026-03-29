@@ -31,7 +31,22 @@ def evaluate(text):
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_API_KEY}"
 
-        prompt = f"""あなたは陸上競技の専門家です。
+        res = requests.post(url, json={
+            "contents":[{"parts":[{"text":prompt}]}]
+        }, timeout=10)
+
+        data = res.json()
+
+        raw = data["candidates"][0]["content"]["parts"][0]["text"]
+
+        return json.loads(raw)
+
+    except Exception as e:
+        print("Gemini error:", e)
+        return None
+
+        prompt = f"""
+        あなたは陸上競技の専門家です。
 
 以下の投稿から情報を正確に抽出し、その記録の価値を評価してください。
 
@@ -138,12 +153,19 @@ while True:
                 result = evaluate(p)
 
                 if result and result.get("display"):
-                    save({
-                        "text": p,
-                        "score": result.get("score"),
-                        "event": result.get("event"),
-                        "mark": result.get("mark"),
-                        "reason": result.get("reason")
+    save({
+        "text": p,
+        "score": result.get("score"),
+        "event": result.get("event"),
+        "mark": result.get("mark"),
+        "wind": result.get("wind"),
+        "athlete": result.get("athlete"),
+        "country": result.get("country"),
+        "competition": result.get("competition"),
+        "location": result.get("location"),
+        "date": result.get("date"),
+        "note": result.get("note"),
+        "reason": result.get("reason")
                     })
 
                     print("saved:", p)
