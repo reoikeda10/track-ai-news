@@ -27,21 +27,38 @@ def get_posts(username):
     try:
         url = f"https://cdn.syndication.twimg.com/widgets/timelines/profile?screen_name={username}"
 
-        res = requests.get(url, timeout=10)
-        data = res.json()
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json"
+        }
+
+        res = requests.get(url, headers=headers, timeout=10)
+
+        # ===== ここ重要 =====
+        if res.status_code != 200:
+            print("HTTP error:", res.status_code, username)
+            return []
+
+        # JSONじゃない場合対策
+        try:
+            data = res.json()
+        except:
+            print("JSON decode error:", username, res.text[:100])
+            return []
 
         html = data.get("body", "")
 
-        # 投稿ブロックごと抽出
+        if not html:
+            print("空データ:", username)
+            return []
+
+        # 投稿抽出
         items = re.findall(r'<div class="timeline-Tweet.*?</div>\s*</div>', html, re.DOTALL)
 
         for item in items:
             try:
-                # テキスト抽出
-                text = re.sub('<.*?>', '', item)
-                text = text.strip()
+                text = re.sub('<.*?>', '', item).strip()
 
-                # tweet id抽出
                 match = re.search(r'data-tweet-id="(\d+)"', item)
                 tweet_id = match.group(1) if match else text[:50]
 
