@@ -162,47 +162,59 @@ def save(data):
         print("Save error:", e)
 
 
-# ===== メイン =====
-while True:
-    try:
-        print("checking...")
+# ===== メイン ====
+from flask import Flask
+import threading
 
-        all_posts = []
+app = Flask(__name__)
 
-        for acc in ACCOUNTS:
-            posts = get_posts(acc)
+@app.route("/")
+def home():
+    return "running"
 
-            if posts:
-                print(f"{acc}: {len(posts)}件取得")
+def run_loop():
+    while True:
+        try:
+            print("checking...")
 
-            all_posts.extend(posts)
+            all_posts = []
 
-        if all_posts:
-            for p in all_posts:
-                result = evaluate(p)
+            for acc in ACCOUNTS:
+                posts = get_posts(acc)
+                all_posts.extend(posts)
 
-                if result and result.get("display"):
-                    save({
-                        "text": p,
-                        "score": result.get("score"),
-                        "event": result.get("event"),
-                        "mark": result.get("mark"),
-                        "wind": result.get("wind"),
-                        "athlete": result.get("athlete"),
-                        "country": result.get("country"),
-                        "competition": result.get("competition"),
-                        "location": result.get("location"),
-                        "date": result.get("date"),
-                        "note": result.get("note"),
-                        "reason": result.get("reason")
-                    })
+            if all_posts:
+                for p in all_posts:
+                    result = evaluate(p)
 
-                    print("saved:", p)
+                    if result and result.get("display"):
+                        save({
+                            "text": p,
+                            "score": result.get("score"),
+                            "event": result.get("event"),
+                            "mark": result.get("mark"),
+                            "wind": result.get("wind"),
+                            "athlete": result.get("athlete"),
+                            "country": result.get("country"),
+                            "competition": result.get("competition"),
+                            "location": result.get("location"),
+                            "date": result.get("date"),
+                            "note": result.get("note"),
+                            "reason": result.get("reason")
+                        })
 
-        else:
-            print("no new")
+                        print("saved:", p)
 
-    except Exception as e:
-        print("MAIN ERROR:", e)
+            else:
+                print("no new")
 
-    time.sleep(CHECK_INTERVAL)
+        except Exception as e:
+            print("MAIN ERROR:", e)
+
+        time.sleep(CHECK_INTERVAL)
+
+# 別スレッドで実行
+threading.Thread(target=run_loop).start()
+
+# Webサーバー起動
+app.run(host="0.0.0.0", port=10000)
