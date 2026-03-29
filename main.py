@@ -14,12 +14,42 @@ ACCOUNTS = [
     "Getsuriku"
 ]
 
-CHECK_INTERVAL = 60
-MODEL = "gemini-3.1-flash-lite-preview"
+CHECK_INTERVAL = 120  # ←少し長め（安定化）
 
+MODEL = "gemini-3.1-flash-lite-preview"
 RESULT_FILE = "results.json"
 
+# 複数Nitter（重要）
+NITTER_INSTANCES = [
+    "https://nitter.net",
+    "https://nitter.poast.org",
+    "https://nitter.privacydev.net",
+    "https://nitter.rawbit.ch"
+]
+
 seen_ids = set()
+
+# ===== RSS取得（フォールバック付き）=====
+def get_feed(username):
+    for base in NITTER_INSTANCES:
+        try:
+            url = f"{base}/{username}/rss"
+
+            feed = feedparser.parse(
+                url,
+                request_headers={"User-Agent": "Mozilla/5.0"}
+            )
+
+            if feed.entries:
+                print(f"OK: {username} ({base})")
+                return feed
+
+        except Exception as e:
+            print("RSS fail:", base, username, e)
+
+    print("RSS全滅:", username)
+    return None
+
 
 # ===== Gemini =====
 def evaluate(text):
@@ -74,9 +104,7 @@ def evaluate(text):
 
         res = requests.post(
             url,
-            json={
-                "contents": [{"parts": [{"text": prompt}]}]
-            },
+            json={"contents": [{"parts": [{"text": prompt}]}]},
             timeout=15
         )
 
@@ -84,7 +112,7 @@ def evaluate(text):
 
         raw = data["candidates"][0]["content"]["parts"][0]["text"]
 
-        # JSONだけ抽出（壊れ対策）
+        # JSON抽出（壊れ対策）
         start = raw.find("{")
         end = raw.rfind("}") + 1
         json_text = raw[start:end]
@@ -105,15 +133,18 @@ def save(data):
         print("Save error:", e)
 
 
-# ===== RSS取得 =====
+# ===== 投稿取得 =====
 def get_posts():
     new_posts = []
 
     for acc in ACCOUNTS:
-        try:
-            feed = feedparser.parse(f"https://nitter.net/{acc}/rss")
+        feed = get_feed(acc)
 
-            for entry in feed.entries:
+        if not feed:
+            continue
+
+        for entry in feed.entries:
+            try:
                 post_id = entry.id
 
                 if post_id not in seen_ids:
@@ -122,8 +153,8 @@ def get_posts():
                     text = entry.title
                     new_posts.append(text)
 
-        except Exception as e:
-            print("RSS error:", acc, e)
+            except Exception as e:
+                print("Entry error:", e)
 
     return new_posts
 
