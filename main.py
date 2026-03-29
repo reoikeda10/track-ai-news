@@ -70,8 +70,7 @@ def evaluate(text):
 - 風速（wind）
 - 場所（location）
 - 大会名（competition）
-- 備考（note）※PB, NR, U20など
-- その他重要情報（noteに含めてもOK）
+- 備考（note）
 
 不明な場合は null
 
@@ -110,9 +109,14 @@ def evaluate(text):
 
         data = res.json()
 
+        # ===== ここが重要 =====
+        if "candidates" not in data:
+            print("Gemini APIエラー:", data)
+            return None
+
         raw = data["candidates"][0]["content"]["parts"][0]["text"]
 
-        # JSON抽出（壊れ対策）
+        # JSON抽出
         start = raw.find("{")
         end = raw.rfind("}") + 1
         json_text = raw[start:end]
