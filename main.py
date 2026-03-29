@@ -3,7 +3,10 @@ import requests
 import json
 import os
 import re
+threading.Thread(target=run_loop).start()
+port = int(os.environ.get("PORT", 10000))
 
+app.run(host="0.0.0.0", port=port)
 # ===== 設定 =====
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
