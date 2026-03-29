@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>陸上AI速報</title>
+</head>
+<body>
+<h1>速報</h1>
+<div id="app"></div>
+
+<script>
+async function load(){
+  const res = await fetch("results.json");
+  const txt = await res.text();
+  const lines = txt.trim().split("\n").reverse();
+
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+
+  lines.forEach(l=>{
+    const d = JSON.parse(l);
+
+    const div = document.createElement("div");
+    div.style.border="1px solid black";
+    div.style.margin="10px";
+    div.style.padding="10px";
+
+    div.innerHTML = `
+      <b>${d.event} ${d.mark}</b><br>
+      ${d.text}<br>
+      Score:${d.score}<br>
+      ${d.reason}
+    `;
+
+    app.appendChild(div);
+  });
+}
+
+load();
+setInterval(load,60000);
+</script>
+</body>
+</html>
