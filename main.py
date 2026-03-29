@@ -23,92 +23,135 @@ seen_ids = set()
 
 # ===== フィルタ =====
 def is_candidate(text):
-    keywords = [
-    ]
+    keywords = ["m","WR","WL","NR","PB","jump","throw"]
     return any(k.lower() in text.lower() for k in keywords)
 
 # ===== Gemini =====
 def evaluate(text):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_API_KEY}"
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_API_KEY}"
 
-    prompt = f"""
-陸上の速報価値を「種目、記録、風速、国名、備考、WRやNRなど、年齢、その場のコンディション、その他文からわかること」から評価してください。
+        prompt = f"""あなたは陸上競技の専門家です。
 
-出力(JSONのみ):
-{{
- "score": 0-100,
+以下の投稿から情報を正確に抽出し、その記録の価値を評価してください。
+
+【抽出項目】
+- 日時（date）
+- 選手名（athlete）
+- 国籍（country）
+- 種目（event）
+- 記録（mark）
+- 風速（wind）
+- 場所（location）
+- 大会名（competition）
+- 備考（note）※PB, NR, U20など
+- その他重要情報（noteに含めてもOK）
+
+不明な場合は null
+
+【評価ルール】
+- 向かい風は評価
+- 追い風+2.1以上でも記録が突出していれば減点しない
+- WR, WL, NR, PBは加点
+- 若手（U20）は加点
+- 大会の格も考慮
+
+【出力形式（JSONのみ）】
+{
  "display": true/false,
+ "score": 0-100,
  "event": "",
  "mark": "",
+ "wind": "",
+ "athlete": "",
+ "country": "",
+ "competition": "",
+ "location": "",
+ "date": "",
+ "note": "",
  "reason": ""
-}}
+}
+
+【重要】
+- JSON以外は一切出力しない
+- 推測しすぎない（不明はnull）
+- 投稿文の情報を最大限使う
+
 
 投稿:
 {text}
 """
 
-    res = requests.post(url, json={
-        "contents":[{"parts":[{"text":prompt}]}]
-    })
+        res = requests.post(url, json={
+            "contents":[{"parts":[{"text":prompt}]}]
+        }, timeout=10)
 
-    try:
-        return res.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except:
+        data = res.json()
+
+        text_out = data["candidates"][0]["content"]["parts"][0]["text"]
+
+        return json.loads(text_out)
+
+    except Exception as e:
+        print("Gemini error:", e)
         return None
 
 # ===== 保存 =====
 def save(data):
-    if not os.path.exists(RESULT_FILE):
-        with open(RESULT_FILE, "w") as f:
-            pass
-
-    with open(RESULT_FILE, "a", encoding="utf-8") as f:
-        f.write(data + "\n")
+    try:
+        with open(RESULT_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(data, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print("Save error:", e)
 
 # ===== RSS =====
 def get_posts():
     new = []
+
     for acc in ACCOUNTS:
-        feed = feedparser.parse(f"https://nitter.net/{acc}/rss")
+        try:
+            feed = feedparser.parse(f"https://nitter.net/{acc}/rss")
 
-        for e in feed.entries:
-            if e.id not in seen_ids:
-                seen_ids.add(e.id)
+            for e in feed.entries:
+                if e.id not in seen_ids:
+                    seen_ids.add(e.id)
 
-                if is_candidate(e.title):
-                    new.append(e.title)
+                    if is_candidate(e.title):
+                        new.append(e.title)
+
+        except Exception as e:
+            print("RSS error:", acc, e)
 
     return new
 
 # ===== メイン =====
 while True:
-    print("checking...")
+    try:
+        print("checking...")
 
-    posts = get_posts()
+        posts = get_posts()
 
-    if posts:
-        for p in posts:
-            result = evaluate(p)
+        if posts:
+            print(f"{len(posts)}件処理")
 
-            if result:
-                try:
-                    data = json.loads(result)
+            for p in posts:
+                result = evaluate(p)
 
-                    if data.get("display"):
-                        save(json.dumps({
-                            "text": p,
-                            "score": data.get("score"),
-                            "event": data.get("event"),
-                            "mark": data.get("mark"),
-                            "reason": data.get("reason")
-                        }, ensure_ascii=False))
+                if result and result.get("display"):
+                    save({
+                        "text": p,
+                        "score": result.get("score"),
+                        "event": result.get("event"),
+                        "mark": result.get("mark"),
+                        "reason": result.get("reason")
+                    })
 
-                        print("saved:", p)
+                    print("saved:", p)
 
-                except:
-                    pass
+        else:
+            print("no new")
 
-    else:
-        print("no new")
+    except Exception as e:
+        print("MAIN ERROR:", e)
 
     time.sleep(CHECK_INTERVAL)
